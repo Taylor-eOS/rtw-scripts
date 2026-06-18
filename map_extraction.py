@@ -1,6 +1,11 @@
 import os
 from PIL import Image
 
+input_filename = "map_regions.tga"
+txt_filename = "settlement_coordinates.txt"
+html_filename = "settlement_map.html"
+bg_image_filename = "map_background.png"
+descr_regions_path = "descr_regions.txt"
 
 def load_image_pixels(input_filename):
     if not os.path.exists(input_filename):
@@ -8,7 +13,6 @@ def load_image_pixels(input_filename):
         return None, 0, 0, None
     img = Image.open(input_filename).convert("RGB")
     return img.load(), img.size[0], img.size[1], img
-
 
 def find_potential_settlements(pixels, width, height):
     settlements = []
@@ -19,7 +23,6 @@ def find_potential_settlements(pixels, width, height):
                 game_y = height - 1 - y
                 settlements.append((x, game_y, x, y))
     return settlements
-
 
 def get_neighbor_pixels(pixels, orig_x, orig_y, width, height):
     neighbors = []
@@ -32,7 +35,6 @@ def get_neighbor_pixels(pixels, orig_x, orig_y, width, height):
     if orig_y < height - 1:
         neighbors.append(pixels[orig_x, orig_y + 1])
     return neighbors
-
 
 def determine_settlement_color(neighbors):
     water_color = (41, 140, 233)
@@ -48,7 +50,6 @@ def determine_settlement_color(neighbors):
         return True, top_color
     return False, top_color
 
-
 def filter_valid_settlements(settlements, pixels, width, height):
     valid_settlements = []
     for x, game_y, orig_x, orig_y in settlements:
@@ -60,12 +61,10 @@ def filter_valid_settlements(settlements, pixels, width, height):
             print(f"Settlement at X: {x}, Y: {game_y} does not have enough matching neighbor colors.")
     return valid_settlements
 
-
 def write_coordinates_file(txt_filename, valid_settlements):
     with open(txt_filename, "w") as f:
         for x, y, (r, g, b), _, _ in valid_settlements:
-            f.write(f"{x}, {y}, {r}, {g}, {b}\n")
-
+            f.write(f"{x} {y} {r} {g} {b}\n")
 
 def generate_background_map(img_object, valid_settlements, output_bg_filename):
     bg_img = img_object.copy()
@@ -74,8 +73,27 @@ def generate_background_map(img_object, valid_settlements, output_bg_filename):
         bg_pixels[orig_x, orig_y] = region_color
     bg_img.save(output_bg_filename, "PNG")
 
+def load_regions_dictionary(descr_regions_path):
+    rgb_to_settlement = {}
+    if not os.path.exists(descr_regions_path):
+        return rgb_to_settlement
+    with open(descr_regions_path, "r", encoding="utf-8", errors="ignore") as f:
+        lines = [line.strip() for line in f]
+    valid_lines = []
+    for line in lines:
+        cleaned = "".join(c for c in line if ord(c) != 160).strip()
+        if cleaned and not cleaned.startswith(";"):
+            valid_lines.append(cleaned)
+    for i in range(len(valid_lines)):
+        parts = valid_lines[i].split()
+        if len(parts) == 3 and all(p.isdigit() for p in parts):
+            if i >= 4:
+                settlement_name = valid_lines[i - 3]
+                rgb = (int(parts[0]), int(parts[1]), int(parts[2]))
+                rgb_to_settlement[rgb] = settlement_name
+    return rgb_to_settlement
 
-def generate_html_map(html_filename, bg_image_filename, valid_settlements, width, height):
+def generate_html_map(html_filename, bg_image_filename, valid_settlements, width, height, rgb_to_settlement):
     scale = 4
     disp_width = width * scale
     disp_height = height * scale
@@ -99,11 +117,15 @@ def generate_html_map(html_filename, bg_image_filename, valid_settlements, width
         '<div class="container">',
         '<div class="map-canvas">'
     ]
-    for idx, (x, y, _, _, _) in enumerate(valid_settlements):
+    for idx, (x, y, region_color, _, _) in enumerate(valid_settlements):
+        settlement_name = rgb_to_settlement.get(region_color)
+        if not settlement_name:
+            print(f"Warning: No settlement found in text file for RGB {region_color} at X: {x}, Y: {y}")
+            settlement_name = f"Unknown (RGB {region_color[0]} {region_color[1]} {region_color[2]})"
         left_pos = x * scale
         bottom_pos = y * scale
         html_lines.append(f'        <div class="settlement" style="left: {left_pos}px; bottom: {bottom_pos}px;">')
-        html_lines.append(f'            <span class="tooltip">Settlement #{idx+1}<br>X: {x}, Y: {y}</span>')
+        html_lines.append(f'            <span class="tooltip">{settlement_name}<br>X: {x}, Y: {y}</span>')
         html_lines.append('        </div>')
     html_lines.extend([
         "    </div>",
@@ -114,12 +136,8 @@ def generate_html_map(html_filename, bg_image_filename, valid_settlements, width
     with open(html_filename, "w") as f:
         f.write("\n".join(html_lines))
 
-
 def generate_settlement_map():
-    input_filename = "map_regions.tga"
-    txt_filename = "settlement_coordinates.txt"
-    html_filename = "settlement_map.html"
-    bg_image_filename = "map_background.png"
+    rgb_to_settlement = load_regions_dictionary(descr_regions_path)
     pixels, width, height, img_object = load_image_pixels(input_filename)
     if pixels is None:
         return
@@ -133,9 +151,9 @@ def generate_settlement_map():
         print("No valid settlements left to map.")
         return
     generate_background_map(img_object, valid_settlements, bg_image_filename)
-    generate_html_map(html_filename, bg_image_filename, valid_settlements, width, height)
+    generate_html_map(html_filename, bg_image_filename, valid_settlements, width, height, rgb_to_settlement)
     print("Files successfully generated.")
-
 
 if __name__ == "__main__":
     generate_settlement_map()
+
