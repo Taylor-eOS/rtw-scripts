@@ -5,10 +5,9 @@ from PIL import Image
 def load_image_pixels(input_filename):
     if not os.path.exists(input_filename):
         print(f"Error: {input_filename} not found.")
-        return None, 0, 0
-    with Image.open(input_filename) as img:
-        img = img.convert("RGB")
-        return img.load(), img.size[0], img.size[1]
+        return None, 0, 0, None
+    img = Image.open(input_filename).convert("RGB")
+    return img.load(), img.size[0], img.size[1], img
 
 
 def find_potential_settlements(pixels, width, height):
@@ -56,7 +55,7 @@ def filter_valid_settlements(settlements, pixels, width, height):
         neighbors = get_neighbor_pixels(pixels, orig_x, orig_y, width, height)
         is_valid, region_color = determine_settlement_color(neighbors)
         if is_valid:
-            valid_settlements.append((x, game_y, region_color))
+            valid_settlements.append((x, game_y, region_color, orig_x, orig_y))
         else:
             print(f"Settlement at X: {x}, Y: {game_y} does not have enough matching neighbor colors.")
     return valid_settlements
@@ -64,11 +63,19 @@ def filter_valid_settlements(settlements, pixels, width, height):
 
 def write_coordinates_file(txt_filename, valid_settlements):
     with open(txt_filename, "w") as f:
-        for x, y, (r, g, b) in valid_settlements:
+        for x, y, (r, g, b), _, _ in valid_settlements:
             f.write(f"{x}, {y}, {r}, {g}, {b}\n")
 
 
-def generate_html_map(html_filename, valid_settlements, width, height):
+def generate_background_map(img_object, valid_settlements, output_bg_filename):
+    bg_img = img_object.copy()
+    bg_pixels = bg_img.load()
+    for _, _, region_color, orig_x, orig_y in valid_settlements:
+        bg_pixels[orig_x, orig_y] = region_color
+    bg_img.save(output_bg_filename, "PNG")
+
+
+def generate_html_map(html_filename, bg_image_filename, valid_settlements, width, height):
     scale = 4
     disp_width = width * scale
     disp_height = height * scale
@@ -81,7 +88,7 @@ def generate_html_map(html_filename, valid_settlements, width, height):
         "<style>",
         "body { background-color: #ffffff; color: #000000; font-family: sans-serif; margin: 0; padding: 40px; }",
         f".container {{ max-width: {disp_width}px; margin: 0 auto; }}",
-        f".map-canvas {{ position: relative; width: {disp_width}px; height: {disp_height}px; background-color: #ffffff; border: 1px solid #000000; }}",
+        f".map-canvas {{ position: relative; width: {disp_width}px; height: {disp_height}px; background-image: url('{bg_image_filename}'); background-size: contain; background-repeat: no-repeat; border: 1px solid #000000; image-rendering: pixelated; }}",
         ".settlement { position: absolute; width: 6px; height: 6px; background-color: #000000; border-radius: 50%; transform: translate(-3px, 3px); cursor: pointer; }",
         ".settlement:hover { background-color: #ff0000; box-shadow: 0 0 8px #ff0000; z-index: 10; }",
         ".tooltip { visibility: hidden; background-color: #000000; color: #ffffff; padding: 4px 8px; border-radius: 4px; position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 11px; }",
@@ -92,7 +99,7 @@ def generate_html_map(html_filename, valid_settlements, width, height):
         '<div class="container">',
         '<div class="map-canvas">'
     ]
-    for idx, (x, y, _) in enumerate(valid_settlements):
+    for idx, (x, y, _, _, _) in enumerate(valid_settlements):
         left_pos = x * scale
         bottom_pos = y * scale
         html_lines.append(f'        <div class="settlement" style="left: {left_pos}px; bottom: {bottom_pos}px;">')
@@ -112,7 +119,8 @@ def generate_settlement_map():
     input_filename = "map_regions.tga"
     txt_filename = "settlement_coordinates.txt"
     html_filename = "settlement_map.html"
-    pixels, width, height = load_image_pixels(input_filename)
+    bg_image_filename = "map_background.png"
+    pixels, width, height, img_object = load_image_pixels(input_filename)
     if pixels is None:
         return
     settlements = find_potential_settlements(pixels, width, height)
@@ -124,7 +132,8 @@ def generate_settlement_map():
     if not valid_settlements:
         print("No valid settlements left to map.")
         return
-    generate_html_map(html_filename, valid_settlements, width, height)
+    generate_background_map(img_object, valid_settlements, bg_image_filename)
+    generate_html_map(html_filename, bg_image_filename, valid_settlements, width, height)
     print("Files successfully generated.")
 
 
