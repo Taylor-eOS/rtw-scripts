@@ -4,8 +4,8 @@ from pathlib import Path
 
 """Renames the units in export_units to what's in the parenthesis."""
 
-INPUT_FILE = Path("export_units.txt")
-OUTPUT_FILE = Path("export_units_ed.txt")
+INPUT_FILE = Path("input.txt")
+OUTPUT_FILE = Path("output.txt")
 unit_key_re = re.compile(r"^\s*\{[^}]+\}\s*(.+?)\s*$")
 
 def extract_name(line):
