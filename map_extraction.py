@@ -4,10 +4,10 @@ from PIL import Image
 from areas import AREAS
 
 input_filename = "map_regions.tga"
+descr_regions_path = "descr_regions.txt"
 txt_filename = "settlement_coordinates.txt"
 html_filename = "settlement_map.html"
 bg_image_filename = "map_background.png"
-descr_regions_path = "descr_regions.txt"
 
 def load_image_pixels(input_filename):
     if not os.path.exists(input_filename):
@@ -188,9 +188,6 @@ def build_settlement_elements(valid_settlements, rgb_to_settlement, settlement_t
 
 def build_svg_elements(area_points, disp_width, disp_height):
     html_lines = [f'        <svg style="position: absolute; top: 0; left: 0; width: {disp_width}px; height: {disp_height}px; pointer-events: none;">']
-    all_foreign_points = {}
-    for name, pts in area_points.items():
-        all_foreign_points[name] = [p for o_name, o_pts in area_points.items() if o_name != name for p in o_pts]
     for area_name, points in area_points.items():
         hull = calculate_convex_hull(points)
         if not hull:
@@ -202,36 +199,6 @@ def build_svg_elements(area_points, disp_width, disp_height):
         cy = sum(p[1] for p in hull) / len(hull)
         if len(hull) > 2:
             hull = expand_polygon(hull, padding=15)
-            foreign_pts = all_foreign_points.get(area_name, [])
-            for fx, fy in foreign_pts:
-                if is_point_in_polygon(fx, fy, hull):
-                    min_dist = float('inf')
-                    insert_idx = 0
-                    for i in range(len(hull)):
-                        p1 = hull[i]
-                        p2 = hull[(i + 1) % len(hull)]
-                        dx = p2[0] - p1[0]
-                        dy = p2[1] - p1[1]
-                        if dx == 0 and dy == 0:
-                            dist = math.sqrt((fx - p1[0])**2 + (fy - p1[1])**2)
-                        else:
-                            t = ((fx - p1[0]) * dx + (fy - p1[1]) * dy) / (dx * dx + dy * dy)
-                            t = max(0, min(1, t))
-                            closest_x = p1[0] + t * dx
-                            closest_y = p1[1] + t * dy
-                            dist = math.sqrt((fx - closest_x)**2 + (fy - closest_y)**2)
-                        if dist < min_dist:
-                            min_dist = dist
-                            insert_idx = i + 1
-                    dcx = cx - fx
-                    dcy = cy - fy
-                    dc_dist = math.sqrt(dcx * dcx + dcy * dcy)
-                    if dc_dist > 0:
-                        ix = fx + (dcx / dc_dist) * 15
-                        iy = fy + (dcy / dc_dist) * 15
-                    else:
-                        ix, iy = fx, fy
-                    hull.insert(insert_idx, (ix, iy))
             path_segments = []
             for i in range(len(hull)):
                 p0 = hull[i - 1]
